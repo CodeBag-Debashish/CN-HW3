@@ -13,7 +13,12 @@ struct sockaddr_in servAddr;
 int L, R, W, timeOut;
 int status[10009];
 int sentTime[10009];
+bool reTransmit[100009];
 mutex windowLock;
+mutex reTransLock;
+unique_lock<mutex> windowLocker(windowLock,defer_lock);
+unique_lock<mutex> reTransLocker(reTransLock,defer_lock);
+
 // function prototypes
 int connectToReceiver(string);
 int sendPacket(int packetNum);
@@ -23,23 +28,37 @@ void displayStats();
 const int MAX_PACKET_NUM = 10000;
 int main(int argc, char const *argv[])  {     
     int sockFd = connectToReceiver("127.0.0.1");
-    int nextPckt = 1;
-    
-    unique_lock<mutex> locker(windowLock,defer_lock);
-    locker.lock();
+    windowLocker.lock();
     L = 1;
     R = 1;
     W = 1;
-    locker.unlock();
-    int l,r,w;
+    windowLocker.unlock();
     int cnt = 1;
     while(true) {
+        int packetNum = cnt;
         locker.lock();
-        l = L; r = R; w = W;
+        if(L == R) {            // this is a case where we need to retransmit
+                                // or may be this is the very first packet
+            reTransLocker.lock();
+            if(reTransmit[L]) {
+                int ret = sendPacket(L);
+                if(ret == FAILURE) {
+                    higLog("%s","sendPacket() failed");
+                }else {
+                    cnt++;
+                }
+                reTransmit[L] = false;
+            }
+            reTransLocker.unlock();
+        }else if(packetNum >=L and packetNum <= R) {
+            int ret = sendPacket(packetNum);
+            if(ret == FAILURE) {
+                higLog("%s","sendPacket() failed");
+            }else {
+                cnt++;
+            }
+        }
         locker.unlock();
-        
-        
-        cnt++;
         if(cnt > MAX_PACKET_NUM) {
             break;
         }
