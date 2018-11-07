@@ -16,9 +16,11 @@ int sentTime[10009];
 mutex windowLock;
 // function prototypes
 int connectToReceiver(string);
+int sendPacket(int packetNum);
 void timeOoutCheck();
 void receiveAck();
-
+void displayStats();
+const int MAX_PACKET_NUM = 10000;
 int main(int argc, char const *argv[])  {     
     int sockFd = connectToReceiver("127.0.0.1");
     int nextPckt = 1;
@@ -36,14 +38,13 @@ int main(int argc, char const *argv[])  {
         l = L; r = R; w = W;
         locker.unlock();
         
-        MP::TcpMessage packet;
-        packet.set_packetnum(cnt);
-        packet.set_msg(std::string(1000,'a'));
-        string protocolBuffer = packet.SerializeAsString();
-        int datalen = protocolBuffer.length();
         
-
+        cnt++;
+        if(cnt > MAX_PACKET_NUM) {
+            break;
+        }
     }
+    displayStats();
     return 0; 
 } 
 
@@ -68,6 +69,21 @@ int connectToReceiver(string Ip) {
     return sockFd;     
 }
 
+int sendPacket(int packetNum) {  
+    MP::TcpMessage packet;
+    packet.set_packetnum(packetNum);
+    packet.set_msg(std::string(1000,'a'));
+    string protocolBuffer = packet.SerializeAsString();
+    int datalen = protocolBuffer.length();
+    int ret = sendto(sockFd,protocolBuffer.c_str(),datalen,0,
+                (struct sockaddr_in*)(&servAddr),sizeof(servAddr));
+                /* servAddr is global */
+    if(ret <= 0) {
+        higLog("%s","sendto() failed");
+        return FAILURE;
+    }
+    return SUCCESS;
+}
 /* void TimeOutChecker(){
     while(1){
         int currTine = Time();
