@@ -43,7 +43,7 @@ void displayStats();
 bool simulationActive = false;
 std::random_device rdevice;
 std::mt19937 mt(rdevice());
-std::uniform_real_distribution<double> dist(1.0, 100.0);
+std::uniform_real_distribution<double> dist(1.0, 1000.0);
 
 int main(int argc, char const *argv[])  {  
     LOG_ENTRY;
@@ -120,7 +120,7 @@ int connectToReceiver(string Ip) {
 int sendPacket(int packetNum) {
     LOG_ENTRY;
     double prob = dist(mt);
-    if(prob > 2) {
+    if(prob > 10) {
         MP::TcpMessage packet;
         packet.set_packetnum(packetNum);
         packet.set_msg(std::string(1000,'a'));
