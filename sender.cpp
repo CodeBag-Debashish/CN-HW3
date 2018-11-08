@@ -231,17 +231,21 @@ void receiveAck() {
             duration_cast<chrono::milliseconds>(currTime - startTime).count();
 
         sampleRTT = chrono::milliseconds(elapsedtime).count() 
-                    - sentTime[currReceivedAck].count();
-        if(flag == false) {
+                    - sentTime[currReceivedAck - 1].count();
+        cout <<"SampleRTT = "<<sampleRTT << endl;
+	if(flag == false) {
             estimatedRTT = sampleRTT << 3;
             flag = true;
         }
+	cout<<"Last estimatedRTT = "<< (estimatedRTT>>3) << endl;
         sampleRTT -= (estimatedRTT >> 3);
         estimatedRTT += sampleRTT;
-        if (sampleRTT < 0)
+        cout <<"New estimated RTT = "<< (estimatedRTT >> 3) << endl;
+	if (sampleRTT < 0)
             sampleRTT = -sampleRTT;
         sampleRTT -= (deviation >> 3);
         deviation += sampleRTT;
+	cout <<"deviation" << deviation << endl;
         timeOut = chrono::milliseconds((estimatedRTT >> 3) + (deviation >> 1));
 
         long long x = timeOut.count();
