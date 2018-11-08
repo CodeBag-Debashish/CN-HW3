@@ -45,6 +45,11 @@ std::random_device rdevice;
 std::mt19937 mt(rdevice());
 std::uniform_real_distribution<double> dist(1.0, 1000.0);
 
+ofstream fout("w_vs_time.txt");
+ofstream ffout("sent_time_vs_packet.txt");
+ofstream fffout("acked_time_vs_packet.txt");
+ofstream ffffout("timeoutpacket_vs_time.txt");
+
 int main(int argc, char const *argv[])  {  
     LOG_ENTRY;
     simulationActive = true;
@@ -120,7 +125,7 @@ int connectToReceiver(string Ip) {
 int sendPacket(int packetNum) {
     LOG_ENTRY;
     double prob = dist(mt);
-    if(prob > 10) {
+    if(prob > 5) {
         MP::TcpMessage packet;
         packet.set_packetnum(packetNum);
         packet.set_msg(std::string(1000,'a'));
@@ -133,14 +138,17 @@ int sendPacket(int packetNum) {
             higLog("%s","sendto() failed");
             return FAILURE;
         }
-        auto endTime = chrono::high_resolution_clock::now();
-        auto elapsedtime = chrono::
-                duration_cast<chrono::microseconds>(endTime - startTime).count();
-        sentTime[packetNum] = chrono::microseconds(elapsedtime);
+    	//fout << chrono::microseconds(elapsedtime).count() <<" "<<packetNum<<endl;
     }else {
         higLog("drop %d",packetNum);
     }
+
+    auto endTime = chrono::high_resolution_clock::now();
+    auto elapsedtime = chrono::
+		duration_cast<chrono::microseconds>(endTime - startTime).count();
+    sentTime[packetNum] = chrono::microseconds(elapsedtime);
     status[packetNum] = SENT;
+    ffout << chrono::microseconds(elapsedtime).count() <<" "<<packetNum<<endl;
     LOG_EXIT;
     return SUCCESS;
 }
@@ -153,23 +161,31 @@ void timeOutCheck() {
             break;
         }
         auto currTime = chrono::high_resolution_clock::now();
+
+	auto elapsedtime = chrono::
+            duration_cast<chrono::microseconds>(currTime - startTime).count();
+
         unique_lock<mutex> windowLocker(windowLock,defer_lock);
         windowLocker.lock();
 	cout <<"going to check from L = "<<L<<" to R = "<<R<<endl;
+	bool f = false;
+	int x;
 	for(int packetNum = L; packetNum<= R; packetNum++) {
-            auto elapsedtime = chrono::            
-            duration_cast<chrono::microseconds>(currTime - startTime).count();
             if(status[packetNum] == SENT and status[packetNum] != ACKED and 
                 chrono::microseconds(elapsedtime).count() - sentTime[packetNum]
                 .count() > timeOut.count() ) {
                 L = R = packetNum;
                 W = 1;
                 reTransmit[packetNum] = true;
-                higLog("@@@@@@@@@@@@ TimeOut packetNum : %d",packetNum);
+                f = true;
+		x = packetNum;
+		higLog("@@@@@@@@@@@@ TimeOut packetNum : %d",packetNum);
                 break;
             }
         }
         windowLocker.unlock();
+	if(f)
+	    ffffout << chrono::microseconds(elapsedtime).count() <<" "<<x <<endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_TIME));
     }
     LOG_EXIT;
@@ -187,7 +203,6 @@ void receiveAck() {
     int estimatedRTT;
     int deviation = 0;
     bool flag = false;
-    ofstream fout("result.txt");
     while(true) {
         memset(buffer,0,sizeof(buffer));
         int in = recvfrom(sockFd, buffer, sizeof(buffer), MSG_WAITALL, 
@@ -235,7 +250,8 @@ void receiveAck() {
         for(int packetNum = lastReceivedAck; packetNum <= currReceivedAck - 1; 
             packetNum++ ) {
             status[packetNum] = ACKED;
-        }
+            fffout << chrono::microseconds(elapsedtime).count() <<" "<< packetNum << endl;
+	}
 
         lastReceivedAck = currReceivedAck;
 
