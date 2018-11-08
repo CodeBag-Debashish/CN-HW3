@@ -8,6 +8,7 @@
 #include "logging.h"
 #include "Message.pb.h"
 using namespace std;
+
 #define PORT                    8080
 #define NOT_SENT                0
 #define SENT                    1
@@ -16,9 +17,10 @@ using namespace std;
 #define MY_PORT_NUM             60000
 #define MAX_BACKLOG_REQUEST     100
 #define SLEEP_TIME              20
+
 const int MAX_PACKET_NUM = 10000;
 struct sockaddr_in receiverAddr; 
-struct sockaddr_in servAddr,;
+struct sockaddr_in servAddr;
 int L, R, W;
 int sockFd;
 std::chrono::milliseconds timeOut(2000);
@@ -34,14 +36,20 @@ unique_lock<mutex> reTransLocker(reTransLock,defer_lock);
 
 int connectToReceiver(string);
 int sendPacket(int packetNum);
-void timeOoutCheck();
+void timeOutCheck();
 void receiveAck();
 void displayStats();
 
 auto startTime = chrono::high_resolution_clock::now();
+bool simulationActive = false;
+
+std::random_device rdevice;
+std::mt19937 mt(rdevice());
+std::uniform_real_distribution<double> dist(1.0, 100.0);
 
 int main(int argc, char const *argv[])  {  
-    srand(time(NULL));   
+
+    
     sockFd = connectToReceiver("127.0.0.1");
     windowLocker.lock();
     L = 1;
@@ -51,11 +59,13 @@ int main(int argc, char const *argv[])  {
     int cnt = 1;
 
     std::thread T1(timeOutCheck);   T1.detach();
-    std::thread T2(ReceiveACK);     T2.detach();
-
+    std::thread T2(receiveAck);     T2.detach();
+    
+    simulationActive = true;
+    
     while(true) {
         int packetNum = cnt;
-        locker.lock();
+        windowLocker.lock();
         if(L == R) {            // this is a case where we need to retransmit
                                 // or may be this is the very first packet
             reTransLocker.lock();
@@ -78,8 +88,9 @@ int main(int argc, char const *argv[])  {
                 cnt++;
             }
         }
-        locker.unlock();
+        windowLocker.unlock();
         if(cnt > MAX_PACKET_NUM) {
+            simulationActive = false;
             break;
         }
     }
@@ -92,6 +103,7 @@ This function connects to the receiver and creates a socketfd
 returns > 0 (sockFd) is success // -1 if failure
 */
 int connectToReceiver(string Ip) {
+    LOG_ENTRY;
     int sockFd;
     if ((sockFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) { 
         higLog("%s","Socket creation error");
@@ -105,14 +117,16 @@ int connectToReceiver(string Ip) {
         higLog("%s","\nConnection Failed\n");
         return FAILURE; 
     }
+    LOG_EXIT;
     return sockFd;     
 }
 /*
 this function
 */
 int sendPacket(int packetNum) {
-    int prob = rand(100) + 1;
-    if(prob > 10) {
+    LOG_ENTRY;
+    double prob = dist(mt);
+    if(prob > 2) {
         MP::TcpMessage packet;
         packet.set_packetnum(packetNum);
         packet.set_msg(std::string(1000,'a'));
@@ -133,12 +147,17 @@ int sendPacket(int packetNum) {
         // dont send this packet
     }
     status[packetNum] = SENT;
+    LOG_EXIT;
     return SUCCESS;
 }
 
 void timeOutCheck() {
+    LOG_ENTRY;
     std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_TIME));
     while(true) {
+        if(simulationActive == false) {
+            break;
+        }
         auto currTime = chrono::high_resolution_clock::now();
         unique_lock<mutex> locker(windowLock,defer_lock);
         windowLocker.lock();
@@ -158,9 +177,11 @@ void timeOutCheck() {
         windowLocker.unlock();
         std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_TIME));
     }
+    LOG_EXIT;
 }
 
-void ReceiveACK() {
+void receiveAck() {
+    LOG_ENTRY;
     string recv;
     int cnt = 0;
     char buffer[MAX_BUFFER];
@@ -219,4 +240,5 @@ void ReceiveACK() {
             break;
         }    
     }
+    LOG_EXIT;
 } 
