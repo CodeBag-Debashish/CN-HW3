@@ -25,15 +25,13 @@ double W;
 int sockFd;
 
 auto startTime = chrono::high_resolution_clock::now();
-std::chrono::milliseconds timeOut(2000);
+std::chrono::microseconds timeOut(2000);
 vector<int> status(MAX_PACKET_NUM + 1);
-vector<chrono::milliseconds> sentTime(MAX_PACKET_NUM + 1);
+vector<chrono::microseconds> sentTime(MAX_PACKET_NUM + 1);
 vector<bool> reTransmit(MAX_PACKET_NUM + 1);
 
 mutex windowLock;
 mutex reTransLock;
-/* unique_lock<mutex> windowLocker(windowLock,defer_lock);
-unique_lock<mutex> reTransLocker(reTransLock,defer_lock); */
 
 
 int connectToReceiver(string);
@@ -59,34 +57,25 @@ int main(int argc, char const *argv[])  {
     R = 1;
     W = 1;
     lockerA.unlock();
-    
-    
-    
-    midLog("%s %d %d %d %s","LRW values ",L,R,W," taken");
-
     int cnt = 1;
+    
     std::thread T1(timeOutCheck);   T1.detach();
     std::thread T2(receiveAck);     T2.detach();
+    
     reTransmit[1] = true;
     while(true) {
-        //higLog("--------------------- L = %d : R = %d",L,R);
         int packetNum = cnt;
-        //midLog("%s","Going to take windowLocker(lock)");
         lockerA.lock();
-        //midLog("%s","Aquired windowLocker(lock)");
         if(L == R) {
-            //midLog("%s","Going to take reTransLocker(lock)");
             unique_lock<mutex> lockerB(reTransLock,defer_lock);
             lockerB.lock();
-            //midLog("%s","Aquired reTransLocker(lock)");
             packetNum = L;
             if(reTransmit[L]) {
-                int ret = sendPacket(packetNum);
+		int ret = sendPacket(packetNum);
                 if(ret == FAILURE) {
                     higLog("%s","sendPacket() failed");
                 }else {
                     cnt = L + 1;
-                    higLog("Packet sent with num : %d",L);
                 }
                 reTransmit[L] = false;
             }
@@ -100,8 +89,6 @@ int main(int argc, char const *argv[])  {
             }
         }
         lockerA.unlock();
-
-
 
         if(cnt > MAX_PACKET_NUM) {
             simulationActive = false;
@@ -125,13 +112,6 @@ int connectToReceiver(string Ip) {
     servAddr.sin_addr.s_addr = inet_addr(Ip.c_str());
     servAddr.sin_port = htons(MY_PORT_NUM); 
     
-    // this is udp no need to connect
-    /* if(connect(_sockFd, (struct sockaddr *)&servAddr, sizeof(servAddr)) < 0) { 
-        higLog("%s","Connection Failed");
-        return FAILURE; 
-    }else {
-        midLog("%s","Connection successfull");
-    } */
     
     LOG_EXIT;
     return _sockFd;     
@@ -140,7 +120,6 @@ int connectToReceiver(string Ip) {
 int sendPacket(int packetNum) {
     LOG_ENTRY;
     double prob = dist(mt);
-    higLog("Prob value %lf",prob);
     if(prob > 2) {
         MP::TcpMessage packet;
         packet.set_packetnum(packetNum);
@@ -154,14 +133,12 @@ int sendPacket(int packetNum) {
             higLog("%s","sendto() failed");
             return FAILURE;
         }
-        //higLog("Message sent with packet num : %d",packetNum);
         auto endTime = chrono::high_resolution_clock::now();
         auto elapsedtime = chrono::
-                duration_cast<chrono::milliseconds>(endTime - startTime).count();
-        sentTime[packetNum] = chrono::milliseconds(elapsedtime);
+                duration_cast<chrono::microseconds>(endTime - startTime).count();
+        sentTime[packetNum] = chrono::microseconds(elapsedtime);
     }else {
-        // dont send this packet
-        higLog("Message not sent with packet num : %d",packetNum);
+        higLog("drop %d",packetNum);
     }
     status[packetNum] = SENT;
     LOG_EXIT;
@@ -178,16 +155,17 @@ void timeOutCheck() {
         auto currTime = chrono::high_resolution_clock::now();
         unique_lock<mutex> windowLocker(windowLock,defer_lock);
         windowLocker.lock();
-        for(int packetNum = L; packetNum<= R; packetNum++) {
+	cout <<"going to check from L = "<<L<<" to R = "<<R<<endl;
+	for(int packetNum = L; packetNum<= R; packetNum++) {
             auto elapsedtime = chrono::            
-            duration_cast<chrono::milliseconds>(currTime - startTime).count();
-            if(status[packetNum] == SENT and 
-                chrono::milliseconds(elapsedtime).count() - sentTime[packetNum]
+            duration_cast<chrono::microseconds>(currTime - startTime).count();
+            if(status[packetNum] == SENT and status[packetNum] != ACKED and 
+                chrono::microseconds(elapsedtime).count() - sentTime[packetNum]
                 .count() > timeOut.count() ) {
                 L = R = packetNum;
                 W = 1;
                 reTransmit[packetNum] = true;
-                higLog("timeOut packetNum : %d",packetNum);
+                higLog("@@@@@@@@@@@@ TimeOut packetNum : %d",packetNum);
                 break;
             }
         }
@@ -209,11 +187,13 @@ void receiveAck() {
     int estimatedRTT;
     int deviation = 0;
     bool flag = false;
+    ofstream fout("result.txt");
     while(true) {
         memset(buffer,0,sizeof(buffer));
         int in = recvfrom(sockFd, buffer, sizeof(buffer), MSG_WAITALL, 
                         ( struct sockaddr *) &servAddr, (socklen_t *)&addrLen); 
-        if(in <= 0) {
+        //std::this_thread::sleep_for(std::chrono::microseconds(20));
+	if(in <= 0) {
             higLog("%s"," recvfrom() failed");
         }
 
@@ -228,9 +208,9 @@ void receiveAck() {
 
         auto currTime = chrono::high_resolution_clock::now();
         auto elapsedtime = chrono::
-            duration_cast<chrono::milliseconds>(currTime - startTime).count();
+            duration_cast<chrono::microseconds>(currTime - startTime).count();
 
-        sampleRTT = chrono::milliseconds(elapsedtime).count() 
+        sampleRTT = chrono::microseconds(elapsedtime).count() 
                     - sentTime[currReceivedAck - 1].count();
         cout <<"SampleRTT = "<<sampleRTT << endl;
 	if(flag == false) {
@@ -246,13 +226,13 @@ void receiveAck() {
         sampleRTT -= (deviation >> 3);
         deviation += sampleRTT;
 	cout <<"deviation" << deviation << endl;
-        timeOut = chrono::milliseconds((estimatedRTT >> 3) + (deviation >> 1));
+        timeOut = chrono::microseconds((estimatedRTT >> 3) + (deviation >> 1));
 
         long long x = timeOut.count();
         higLog(">>>>>>> New timeOut = %lld",x);
 
         int ackedPackets = currReceivedAck - lastReceivedAck;
-        for(int packetNum = lastReceivedAck + 1; packetNum<=currReceivedAck; 
+        for(int packetNum = lastReceivedAck; packetNum <= currReceivedAck - 1; 
             packetNum++ ) {
             status[packetNum] = ACKED;
         }
@@ -265,9 +245,11 @@ void receiveAck() {
         higLog("ackedPackets = %d",ackedPackets);
         L = lastReceivedAck;
         W = W + (1.0/W) * (ackedPackets);
-        R = L + floor(W); 
+	R = L + floor(W); 
         higLog("L = %d  R = %d  W = %lf",L,R,W);
         lockerA.unlock();
+
+	fout <<chrono::microseconds(elapsedtime).count() <<" "<<W<<endl;
 
         cnt = currReceivedAck - 1;  // this will go max upto 10000
         
