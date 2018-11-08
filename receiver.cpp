@@ -1,15 +1,21 @@
 // Server side C/C++ program to demonstrate Socket programming 
-#include <unistd.h> 
-#include <stdio.h> 
+#include <bits/stdc++.h>
 #include <sys/socket.h> 
-#include <stdlib.h> 
 #include <netinet/in.h> 
-#include <string.h> 
+#include <arpa/inet.h>
+#include <thread>
+#include <chrono>
+#include <unistd.h>
 #include "logging.h"
 #include "Message.pb.h"
+using namespace std;
 #define PORT 8080 
+#define FAILURE -1
 
-int server_fd, sockFd, valread,currRcvPacket,lastAckSent; 
+
+
+int server_fd,addrLen, sockFd, valread,currRcvPacket,lastAckSent, LastRcvPacket, LastRecvAck; 
+struct sockaddr_in servAddr,receiverAddr;
 struct sockaddr_in address; 
 int opt = 1; 
 int addrlen = sizeof(address); 
@@ -26,7 +32,7 @@ int sendPacket(int packetNum) {
     string protocolBuffer = packet.SerializeAsString();
     int datalen = protocolBuffer.length();
     int ret = sendto(sockFd,protocolBuffer.c_str(),datalen,0,
-                (struct sockaddr_in*)(&servAddr),sizeof(servAddr));
+                    (struct sockaddr *)(&servAddr),sizeof(servAddr));
                 /* servAddr is global */
     if(ret <= 0) {
         higLog("%s","sendto() failed");
@@ -72,19 +78,19 @@ int main(int argc, char const *argv[])
     while(true){
         memset(buffer,0,sizeof(buffer));
         int in = recvfrom(sockFd, buffer, sizeof(buffer), 0, 
-             ( struct sockaddr *) &address, &addrlen); 
+                        ( struct sockaddr *) &receiverAddr, (socklen_t *)&addrLen);
         if(in <= 0) {
           higLog("%s"," recvfrom() failed");
         }
         buffer[in] = '\0';
         string protocolBuffer = buffer;
-        Mp::TcpMessage packet;
+        MP::TcpMessage packet;
         packet.ParseFromString(protocolBuffer);
         currRcvPacket = (int)(packet.packetnum());
         
         recvPcket[currRcvPacket] = true;
         LastRecvAck = currRcvPacket;
-
+        int curr, threshold;
         if(curr-lastAckSent>threshold){
             timeOoutCheck();
             int ret = sendPacket(LastRecvAck);
@@ -92,9 +98,7 @@ int main(int argc, char const *argv[])
                 higLog("%s","sendPacket() failed");
             }
             lastAckSent = LastRecvAck; 
-        }
-          
-       
+        }   
     }
     
     return 0; 
