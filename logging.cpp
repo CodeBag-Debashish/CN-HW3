@@ -31,24 +31,7 @@ void platformLog(int logLevel, const char* file, int line,
 
 	if(logLevel > 4) 
 		return;
-	
-	/* 
-
-	if(logLevel == 4) {
-		std::ofstream logFile;
-		logFile.open("ranLog.txt");
-		logFile << getpid() <<" "<<timeBuff <<" "<<file<<" "<<line<<" "<<func;
 		
-		va_start (arg, logMsg);
-		vfprintf (logFile, logMsg, arg);
-		va_end (arg);
-	
-	}else if(logLevel == 5) {
-
-	} 
-	
-	*/
-
 	time(&timer);
 	timeInfo = localtime(&timer);
 	strftime(timeBuff, 20, "%H:%M:%S", timeInfo);

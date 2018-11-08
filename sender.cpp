@@ -48,8 +48,6 @@ std::mt19937 mt(rdevice());
 std::uniform_real_distribution<double> dist(1.0, 100.0);
 
 int main(int argc, char const *argv[])  {  
-
-    
     sockFd = connectToReceiver("127.0.0.1");
     windowLocker.lock();
     L = 1;
@@ -133,7 +131,7 @@ int sendPacket(int packetNum) {
         string protocolBuffer = packet.SerializeAsString();
         int datalen = protocolBuffer.length();
         int ret = sendto(sockFd,protocolBuffer.c_str(),datalen,0,
-                    (struct sockaddr_in*)(&servAddr),sizeof(servAddr));
+                    (struct sockaddr *)(&servAddr),sizeof(servAddr));
                     /* servAddr is global */
         if(ret <= 0) {
             higLog("%s","sendto() failed");
@@ -142,7 +140,7 @@ int sendPacket(int packetNum) {
         auto endTime = chrono::high_resolution_clock::now();
         auto elapsedtime = chrono::
                 duration_cast<chrono::milliseconds>(endTime - startTime).count();
-        sentTime[i] = chrono::milliseconds(elapsedtime);
+        sentTime[packetNum] = chrono::milliseconds(elapsedtime);
     }else {
         // dont send this packet
     }
@@ -191,17 +189,18 @@ void receiveAck() {
     int sampleRTT;
     int estimatedRTT;
     int deviation = 0;
+    bool flag = false;
     while(true) {
         memset(buffer,0,sizeof(buffer));
         int in = recvfrom(sockFd, buffer, sizeof(buffer), 0, 
-                        ( struct sockaddr *) &receiverAddr, &addrlen); 
+                        ( struct sockaddr *) &receiverAddr, (socklen_t *)&addrLen); 
         if(in <= 0) {
             higLog("%s"," recvfrom() failed");
         }
 
         buffer[in] = '\0';
         string protocolBuffer = buffer;
-        Mp::TcpMessage packet;
+        MP::TcpMessage packet;
         packet.ParseFromString(protocolBuffer);
         currReceivedAck = (int)(packet.packetnum());
 
@@ -242,3 +241,7 @@ void receiveAck() {
     }
     LOG_EXIT;
 } 
+
+void displayStats() {
+    // TODO
+}
